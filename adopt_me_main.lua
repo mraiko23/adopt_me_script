@@ -1,365 +1,380 @@
---[[
-    🎮 ADOPT ME AUTOMATION SCRIPT
-    🚀 Автоматизация для игры Adopt Me в Roblox
-    ⚡ Функции: авто-кормление, телепорт, фарминг, торговля
---]]
+-- Обновленный скрипт с улучшенной совместимостью для Delta-X
 
--- Загрузка библиотек
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
+local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- Переменные
-local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local RootPart = Character:WaitForChild("HumanoidRootPart")
-
--- Настройки
-local Config = {
-    AutoFeed = false,
-    AutoPlay = false,
-    AutoCollectMoney = false,
-    AutoTrade = false,
-    FeedInterval = 30, -- секунды
-    PlayInterval = 45,
-    WalkSpeed = 50,
-    JumpPower = 100,
-    Notifications = true
+local Settings = {
+    Enabled = false,
+    IsVisible = true,
+    FarmSpeed = 10,
+    PickupRadius = 25,
+    CollectRareItemsOnly = false,
+    AutoResetChildren = false,
+    ChildrenRadius = 10,
+    AutoResetPets = true,
+    PetsRadius = 10,
+    AntiAfkEnable = true,
+    MovementInterval = 5
 }
 
--- GUI Создание
-local ScreenGui = Instance.new("ScreenGui")
-local MainFrame = Instance.new("Frame")
-local TitleLabel = Instance.new("TextLabel")
-local AutoFeedButton = Instance.new("TextButton")
-local AutoPlayButton = Instance.new("TextButton")
-local TeleportFrame = Instance.new("Frame")
-local SpeedSlider = Instance.new("TextBox")
-local CloseButton = Instance.new("TextButton")
-local MinimizeButton = Instance.new("TextButton")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:FindFirstChildOfClass("Humanoid") or Character:WaitForChild("Humanoid")
+local RootPart = Character:FindFirstChild("HumanoidRootPart") or Character:WaitForChild("HumanoidRootPart")
 
--- GUI Настройки
-ScreenGui.Name = "AdoptMeGUI"
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-ScreenGui.ResetOnSpawn = false
+-- Функция создания красивого UI меню
+local function CreateUI()
+    if PlayerGui:FindFirstChild("AutoFarmUI") then
+        PlayerGui.AutoFarmUI:Destroy()
+    end
 
--- Основное окно
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-MainFrame.BorderSizePixel = 0
-MainFrame.Position = UDim2.new(0.1, 0, 0.1, 0)
-MainFrame.Size = UDim2.new(0, 400, 0, 500)
-MainFrame.Active = true
-MainFrame.Draggable = true
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "AutoFarmUI"
+    ScreenGui.DisplayOrder = 1000
+    ScreenGui.ResetOnSpellEnabled = false
+    ScreenGui.Parent = PlayerGui
 
--- Скругленные углы
-local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 15)
-Corner.Parent = MainFrame
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 350, 0, 450)
+    MainFrame.Position = UDim2.new(0.5, -175, 0, 50)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    MainFrame.BackgroundTransparency = Settings.IsVisible and 0.1 or 0.9
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = ScreenGui
 
--- Заголовок
-TitleLabel.Name = "TitleLabel"
-TitleLabel.Parent = MainFrame
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Position = UDim2.new(0, 0, 0, 0)
-TitleLabel.Size = UDim2.new(1, 0, 0, 50)
-TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.Text = "🎮 ADOPT ME SCRIPT v2.0"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 18
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = MainFrame
 
--- Кнопка автокормления
-AutoFeedButton.Name = "AutoFeedButton"
-AutoFeedButton.Parent = MainFrame
-AutoFeedButton.BackgroundColor3 = Color3.fromRGB(85, 170, 85)
-AutoFeedButton.Position = UDim2.new(0.05, 0, 0.15, 0)
-AutoFeedButton.Size = UDim2.new(0.9, 0, 0, 40)
-AutoFeedButton.Font = Enum.Font.Gotham
-AutoFeedButton.Text = "🍎 Авто-кормление: ВЫКЛ"
-AutoFeedButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-AutoFeedButton.TextSize = 14
+    -- Создание заголовка
+    local TitleFrame = Instance.new("Frame")
+    TitleFrame.Name = "TitleFrame"
+    TitleFrame.Size = UDim2.new(1, 0, 0, 40)
+    TitleFrame.Position = UDim2.new(0, 0, 0, 0)
+    TitleFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    TitleFrame.BorderSizePixel = 0
+    TitleFrame.Parent = MainFrame
 
-local AutoFeedCorner = Instance.new("UICorner")
-AutoFeedCorner.CornerRadius = UDim.new(0, 8)
-AutoFeedCorner.Parent = AutoFeedButton
+    local TitleCorner = Instance.new("UICorner")
+    TitleCorner.CornerRadius = UDim.new(0, 8)
+    TitleCorner.Parent = TitleFrame
 
--- Кнопка автоигры
-AutoPlayButton.Name = "AutoPlayButton"
-AutoPlayButton.Parent = MainFrame
-AutoPlayButton.BackgroundColor3 = Color3.fromRGB(85, 170, 85)
-AutoPlayButton.Position = UDim2.new(0.05, 0, 0.25, 0)
-AutoPlayButton.Size = UDim2.new(0.9, 0, 0, 40)
-AutoPlayButton.Font = Enum.Font.Gotham
-AutoPlayButton.Text = "🎮 Авто-игра: ВЫКЛ"
-AutoPlayButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-AutoPlayButton.TextSize = 14
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Name = "TitleLabel"
+    TitleLabel.Size = UDim2.new(1, 0, 1, 0)
+    TitleLabel.Position = UDim2.new(0, 0, 0, 0)
+    TitleLabel.FontFace = Font.new("rbxasset://fonts/families/Gotham.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    TitleLabel.Text = "Adopt Me Auto-Farm"
+    TitleLabel.TextSize = 18
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.BackgroundTransparency = 0
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    TitleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    TitleLabel.TextStrokeTransparency = 0.5
+    TitleLabel.Parent = TitleFrame
 
-local AutoPlayCorner = Instance.new("UICorner")
-AutoPlayCorner.CornerRadius = UDim.new(0, 8)
-AutoPlayCorner.Parent = AutoPlayButton
+    -- Добавление элементов управления
+    MainFrame.ChildAdded:Connect(function(child)
+        if child.Name == "ToggleButton" or child.Name == "HideButton" then return end
 
--- Функции уведомлений
-local function SendNotification(title, text, duration)
-    if not Config.Notifications then return end
-    
-    local NotificationGui = Instance.new("ScreenGui")
-    local NotificationFrame = Instance.new("Frame")
-    local NotificationTitle = Instance.new("TextLabel")
-    local NotificationText = Instance.new("TextLabel")
-    
-    NotificationGui.Name = "NotificationGui"
-    NotificationGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    
-    NotificationFrame.Name = "NotificationFrame"
-    NotificationFrame.Parent = NotificationGui
-    NotificationFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    NotificationFrame.BorderSizePixel = 0
-    NotificationFrame.Position = UDim2.new(1, 10, 0.8, 0)
-    NotificationFrame.Size = UDim2.new(0, 300, 0, 80)
-    
-    local NotifCorner = Instance.new("UICorner")
-    NotifCorner.CornerRadius = UDim.new(0, 10)
-    NotifCorner.Parent = NotificationFrame
-    
-    NotificationTitle.Parent = NotificationFrame
-    NotificationTitle.BackgroundTransparency = 1
-    NotificationTitle.Size = UDim2.new(1, 0, 0.5, 0)
-    NotificationTitle.Font = Enum.Font.GothamBold
-    NotificationTitle.Text = title
-    NotificationTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    NotificationTitle.TextSize = 14
-    
-    NotificationText.Parent = NotificationFrame
-    NotificationText.BackgroundTransparency = 1
-    NotificationText.Position = UDim2.new(0, 0, 0.5, 0)
-    NotificationText.Size = UDim2.new(1, 0, 0.5, 0)
-    NotificationText.Font = Enum.Font.Gotham
-    NotificationText.Text = text
-    NotificationText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    NotificationText.TextSize = 12
-    
-    -- Анимация появления
-    local TweenIn = TweenService:Create(
-        NotificationFrame,
-        TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-        {Position = UDim2.new(0.7, 0, 0.8, 0)}
-    )
-    TweenIn:Play()
-    
-    -- Автоудаление
-    wait(duration or 3)
-    local TweenOut = TweenService:Create(
-        NotificationFrame,
-        TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-        {Position = UDim2.new(1, 10, 0.8, 0)}
-    )
-    TweenOut:Play()
-    TweenOut.Completed:Connect(function()
-        NotificationGui:Destroy()
+        local offsetY = 0
+        for _, existingChild in ipairs(MainFrame:GetChildren()) do
+            if existingChild.Name ~= "TitleFrame" and existingChild.Name ~= "UICorner" then
+                offsetY = offsetY + existingChild.Size.Y.Offset + 10
+            end
+        end
+
+        child.Position = UDim2.new(0.05, 0, 0, offsetY)
     end)
-end
 
--- Функция поиска питомцев
-local function FindPets()
-    local pets = {}
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj.Name == "Pet" and obj:FindFirstChild("Humanoid") then
-            table.insert(pets, obj)
+    -- Строка настройки скорости
+    local SpeedFrame = Instance.new("Frame")
+    SpeedFrame.Name = "SpeedFrame"
+    SpeedFrame.Size = UDim2.new(0.9, 0, 0, 50)
+    SpeedFrame.Position = UDim2.new(0.05, 0, 0, 50)
+    SpeedFrame.BackgroundTransparency = 1
+    SpeedFrame.LayoutOrder = 1
+    SpeedFrame.Parent = MainFrame
+
+    local SpeedLabel = Instance.new("TextLabel")
+    SpeedLabel.Name = "SpeedLabel"
+    SpeedLabel.Size = UDim2.new(0.6, 0, 1, 0)
+    SpeedLabel.Position = UDim2.new(0, 0, 0, 0)
+    SpeedLabel.FontFace = Font.new("rbxasset://fonts/families/Gotham.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    SpeedLabel.Text = "Farm Speed:"
+    SpeedLabel.TextSize = 14
+    SpeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SpeedLabel.BackgroundTransparency = 1
+    SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+    SpeedLabel.Parent = SpeedFrame
+
+    local SpeedSlider = Instance.new("Frame")
+    SpeedSlider.Name = "SpeedSlider"
+    SpeedSlider.Size = UDim2.new(0.35, 0, 0, 20)
+    SpeedSlider.Position = UDim2.new(0.6, 0, 0.35, 0)
+    SpeedSlider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    SpeedSlider.BorderSizePixel = 0
+    SpeedSlider.Parent = SpeedFrame
+
+    local SpeedBar = Instance.new("Frame")
+    SpeedBar.Name = "SpeedBar"
+    SpeedBar.Size = UDim2.new(0, 10, 0, 20)
+    SpeedBar.Position = UDim2.new(0, 0, 0, 0)
+    SpeedBar.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
+    SpeedBar.BorderSizePixel = 0
+    SpeedBar.Parent = SpeedSlider
+
+    local SpeedValueLabel = Instance.new("TextLabel")
+    SpeedValueLabel.Name = "SpeedValueLabel"
+    SpeedValueLabel.Size = UDim2.new(0.15, 0, 0.9, 0)
+    SpeedValueLabel.Position = UDim2.new(0.8, 0, 0.05, 0)
+    SpeedValueLabel.FontFace = Font.new("rbxasset://fonts/families/Gotham.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    SpeedValueLabel.Text = "10"
+    SpeedValueLabel.TextSize = 12
+    SpeedValueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SpeedValueLabel.BackgroundTransparency = 1
+    SpeedValueLabel.TextXAlignment = Enum.TextXAlignment.Center
+    SpeedValueLabel.Parent = SpeedFrame
+
+    local SpeedIndicator = Instance.new("Frame")
+    SpeedIndicator.Name = "SpeedIndicator"
+    SpeedIndicator.Size = UDim2.new(0, 15, 0, 15)
+    SpeedIndicator.Position = UDim2.new(0.1, 0, 0.2, 0)
+    SpeedIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    SpeedIndicator.BorderSizePixel = 0
+    SpeedIndicator.Parent = SpeedSlider
+
+    -- Создание кнопки включения/выключения
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Name = "ToggleButton"
+    ToggleButton.Size = UDim2.new(0.8, 0, 0, 40)
+    ToggleButton.Position = UDim2.new(0.1, 0, 0.85, 0)
+    ToggleButton.FontFace = Font.new("rbxasset://fonts/families/Gotham.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    ToggleButton.Text = Settings.Enabled and "FARM DISABLED" or "ENABLE FARM"
+    ToggleButton.TextSize = 14
+    ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleButton.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(50, 200, 50)
+    ToggleButton.BorderSizePixel = 0
+    ToggleButton.Parent = MainFrame
+
+    -- Создание кнопки скрытия/показа
+    local HideButton = Instance.new("TextButton")
+    HideButton.Name = "HideButton"
+    HideButton.Size = UDim2.new(0.8, 0, 0, 30)
+    HideButton.Position = UDim2.new(0.1, 0, 0.95, 0)
+    HideButton.FontFace = Font.new("rbxasset://fonts/families/Gotham.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    HideButton.Text = "HIDE"
+    HideButton.TextSize = 14
+    HideButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    HideButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    HideButton.BorderSizePixel = 0
+    HideButton.Parent = MainFrame
+
+    -- Обработчики событий для кнопок
+    ToggleButton.MouseButton1Click:Connect(function()
+        Settings.Enabled = not Settings.Enabled
+        ToggleButton.Text = Settings.Enabled and "FARM DISABLED" or "ENABLE FARM"
+        ToggleButton.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(50, 200, 50)
+        
+        if Settings.Enabled then
+            startAutoFarm()
         end
-    end
-    return pets
-end
+    end)
 
--- Функция кормления питомцев
-local function FeedPets()
-    local pets = FindPets()
-    for _, pet in pairs(pets) do
-        if pet:FindFirstChild("Humanoid") and pet.Humanoid.Health > 0 then
-            -- Логика кормления (зависит от игры)
-            local args = {
-                [1] = "Feed",
-                [2] = pet,
-                [3] = "Apple" -- или другая еда
-            }
-            
-            pcall(function()
-                ReplicatedStorage.API:FindFirstChild("PetAPI/FeedPet"):InvokeServer(unpack(args))
-            end)
+    HideButton.MouseButton1Click:Connect(function()
+        Settings.IsVisible = not Settings.IsVisible
+        MainFrame.BackgroundTransparency = Settings.IsVisible and 0.1 or 0.9
+        HideButton.Text = Settings.IsVisible and "HIDE" or "SHOW"
+    end)
+
+    -- Обработчики для слайдера скорости
+    local dragging = false
+    SpeedSlider.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            updateSpeedSlider(input)
         end
-    end
-end
+    end)
 
--- Функция игры с питомцами
-local function PlayWithPets()
-    local pets = FindPets()
-    for _, pet in pairs(pets) do
-        if pet:FindFirstChild("Humanoid") and pet.Humanoid.Health > 0 then
-            local args = {
-                [1] = "Play",
-                [2] = pet
-            }
-            
-            pcall(function()
-                ReplicatedStorage.API:FindFirstChild("PetAPI/PlayWithPet"):InvokeServer(unpack(args))
-            end)
+    SpeedSlider.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
         end
+    end)
+
+    game:GetService("RunService").Heartbeat:Connect(function()
+        if dragging then
+            dragInput = UserInputService:GetMouseLocation()
+            updateSpeedSlider(dragInput)
+        end
+    end)
+
+    local function updateSpeedSlider(mousePosition)
+        local absX = SpeedSlider.AbsolutePosition.X
+        local absWidth = SpeedSlider.AbsoluteSize.X
+        
+        local percentage = math.clamp((mousePosition.X - absX) / absWidth, 0, 1)
+        SpeedBar.Size = UDim2.new(percentage, 0, 1, 0)
+        
+        Settings.FarmSpeed = math.round(1 + percentage * 24)
+        SpeedValueLabel.Text = Settings.FarmSpeed
     end
 end
 
--- Функция сбора денег
-local function CollectMoney()
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj.Name == "Money" or obj.Name == "Cash" then
-            if obj:FindFirstChild("ClickDetector") then
-                fireclickdetector(obj.ClickDetector)
+-- Основная функция автофарма
+local function startAutoFarm()
+    if Settings.Enabled then
+        spawn(function()
+            while Settings.Enabled and Character and Character:IsDescendantOf(workspace) do
+                -- Обновление человека и частей тела
+                Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                RootPart = Character:FindFirstChild("HumanoidRootPart")
+
+                if not Humanoid or not RootPart then wait(1) continue end
+
+                -- Проверка на наличие анти-АФК
+                if Settings.AntiAfkEnable then
+                    doAntiAfk()
+                end
+
+                -- Поиск и сбор предметов
+                doCollectItems()
+
+                -- Автоперенос детей
+                if Settings.AutoResetChildren then
+                    doChildReset()
+                end
+
+                -- Автоперенос питомцев
+                if Settings.AutoResetPets then
+                    doPetReset()
+                end
+
+                wait(1)
+            end
+        end)
+    end
+end
+
+local function doAntiAfk()
+    local randomPos = RootPart.Position + Vector3.new(math.random(-5, 5), 0, math.random(-5, 5))
+    Humanoid:MoveTo(randomPos)
+    wait(Settings.MovementInterval)
+end
+
+local function doCollectItems()
+    local collectibles = workspace:FindFirstChild("Collectibles") or workspace:FindFirstChild("Drops")
+    
+    if collectibles then
+        for _, item in ipairs(collectibles:GetChildren()) do
+            if item:IsA("BasePart") or item:IsA("MeshPart") then
+                local distance = (item.Position - RootPart.Position).Magnitude
+                
+                if distance <= Settings.PickupRadius then
+                    if not Settings.CollectRareItemsOnly or #item:GetChildren() > 0 then
+                        Humanoid:MoveTo(item.Position)
+                        wait(0.5)
+                        Humanoid:MoveTo(RootPart.Position)  -- Возвращаемся в исходное положение
+                        wait(0.5)
+                    end
+                end
             end
         end
     end
 end
 
--- Телепорт функции
-local TeleportLocations = {
-    ["Дом"] = Vector3.new(-250, 3, -30),
-    ["Магазин"] = Vector3.new(-120, 3, -450),
-    ["Школа"] = Vector3.new(-650, 20, 250),
-    ["Больница"] = Vector3.new(320, 15, 470),
-    ["Парк"] = Vector3.new(-950, 3, -500),
-    ["Пляж"] = Vector3.new(-1600, 3, -100)
-}
-
-local function TeleportTo(position)
-    if Character and Character:FindFirstChild("HumanoidRootPart") then
-        Character.HumanoidRootPart.CFrame = CFrame.new(position)
-        SendNotification("Телепорт", "Перемещение выполнено!", 2)
+local function doChildReset()
+    local children = workspace:FindFirstChild("Children")
+    
+    if children then
+        for _, child in ipairs(children:GetChildren()) do
+            if child.Name:find(Player.Name.."'s Child") and child:IsA("Model") then
+                local childRoot = child:FindFirstChild("HumanoidRootPart") or child:FindFirstChild("Torso")
+                
+                if childRoot then
+                    local distance = (childRoot.Position - RootPart.Position).Magnitude
+                    
+                    if distance > Settings.ChildrenRadius then
+                        Humanoid:MoveTo(childRoot.Position)
+                        wait(0.5)
+                        Humanoid:MoveTo(RootPart.Position)  -- Возвращаемся в исходное положение
+                        wait(0.5)
+                    end
+                end
+            end
+        end
     end
 end
 
--- Создание кнопок телепортации
-local yPos = 0.35
-for locationName, position in pairs(TeleportLocations) do
-    local TeleportButton = Instance.new("TextButton")
-    TeleportButton.Name = locationName .. "Button"
-    TeleportButton.Parent = MainFrame
-    TeleportButton.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
-    TeleportButton.Position = UDim2.new(0.05, 0, yPos, 0)
-    TeleportButton.Size = UDim2.new(0.42, 0, 0, 35)
-    TeleportButton.Font = Enum.Font.Gotham
-    TeleportButton.Text = "📍 " .. locationName
-    TeleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TeleportButton.TextSize = 12
+local function doPetReset()
+    local pets = workspace:FindFirstChild("Pets")
     
-    local TeleportCorner = Instance.new("UICorner")
-    TeleportCorner.CornerRadius = UDim.new(0, 6)
-    TeleportCorner.Parent = TeleportButton
+    if pets then
+        for _, pet in ipairs(pets:GetChildren()) do
+            if pet.Name:find(Player.Name.."'s Pet") and pet:IsA("Model") then
+                local petRoot = pet:FindFirstChild("HumanoidRootPart") or pet:FindFirstChild("Torso")
+                
+                if petRoot then
+                    local distance = (petRoot.Position - RootPart.Position).Magnitude
+                    
+                    if distance > Settings.PetsRadius then
+                        Humanoid:MoveTo(petRoot.Position)
+                        wait(0.5)
+                        Humanoid:MoveTo(RootPart.Position)  -- Возвращаемся в исходное положение
+                        wait(0.5)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Главная функция инициализации
+local function Init()
+    CreateUI()
     
-    TeleportButton.MouseButton1Click:Connect(function()
-        TeleportTo(position)
+    -- Обработчики ввода
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Enum.KeyCode.F5 then
+            Settings.IsVisible = not Settings.IsVisible
+            if PlayerGui:FindFirstChild("AutoFarmUI") then
+                local MainFrame = PlayerGui.AutoFarmUI:FindFirstChild("MainFrame")
+                if MainFrame then
+                    MainFrame.BackgroundTransparency = Settings.IsVisible and 0.1 or 0.9
+                    local HideButton = MainFrame:FindFirstChild("HideButton")
+                    if HideButton then
+                        HideButton.Text = Settings.IsVisible and "HIDE" or "SHOW"
+                    end
+                end
+            end
+        elseif input.KeyCode == Enum.KeyCode.F6 then
+            Settings.Enabled = not Settings.Enabled
+            if PlayerGui:FindFirstChild("AutoFarmUI") then
+                local MainFrame = PlayerGui.AutoFarmUI:FindFirstChild("MainFrame")
+                local ToggleButton = MainFrame:FindFirstChild("ToggleButton")
+                if ToggleButton then
+                    ToggleButton.Text = Settings.Enabled and "FARM DISABLED" or "ENABLE FARM"
+                    ToggleButton.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(50, 200, 50)
+                end
+            end
+        end
     end)
     
-    yPos = yPos + 0.08
-    if yPos > 0.7 then
-        yPos = 0.35
-        -- Создаем вторую колонку
-        TeleportButton.Position = UDim2.new(0.53, 0, 0.35, 0)
-    end
+    -- Обработчик обновления характера
+    Player.CharacterAdded:Connect(function(newCharacter)
+        Character = newCharacter
+        wait(1)
+        Humanoid = Character:FindFirstChildOfClass("Humanoid") or Character:WaitForChild("Humanoid")
+        RootPart = Character:FindFirstChild("HumanoidRootPart") or Character:WaitForChild("HumanoidRootPart")
+    
+        if Settings.Enabled then
+            startAutoFarm()
+        end
+    end)
 end
 
--- Обработчики событий кнопок
-AutoFeedButton.MouseButton1Click:Connect(function()
-    Config.AutoFeed = not Config.AutoFeed
-    if Config.AutoFeed then
-        AutoFeedButton.Text = "🍎 Авто-кормление: ВКЛ"
-        AutoFeedButton.BackgroundColor3 = Color3.fromRGB(170, 85, 85)
-        SendNotification("Авто-кормление", "Включено!", 2)
-    else
-        AutoFeedButton.Text = "🍎 Авто-кормление: ВЫКЛ"
-        AutoFeedButton.BackgroundColor3 = Color3.fromRGB(85, 170, 85)
-        SendNotification("Авто-кормление", "Выключено!", 2)
-    end
-end)
-
-AutoPlayButton.MouseButton1Click:Connect(function()
-    Config.AutoPlay = not Config.AutoPlay
-    if Config.AutoPlay then
-        AutoPlayButton.Text = "🎮 Авто-игра: ВКЛ"
-        AutoPlayButton.BackgroundColor3 = Color3.fromRGB(170, 85, 85)
-        SendNotification("Авто-игра", "Включено!", 2)
-    else
-        AutoPlayButton.Text = "🎮 Авто-игра: ВЫКЛ"
-        AutoPlayButton.BackgroundColor3 = Color3.fromRGB(85, 170, 85)
-        SendNotification("Авто-игра", "Выключено!", 2)
-    end
-end)
-
--- Основные циклы автоматизации
-spawn(function()
-    while true do
-        if Config.AutoFeed then
-            FeedPets()
-        end
-        wait(Config.FeedInterval)
-    end
-end)
-
-spawn(function()
-    while true do
-        if Config.AutoPlay then
-            PlayWithPets()
-        end
-        wait(Config.PlayInterval)
-    end
-end)
-
-spawn(function()
-    while true do
-        if Config.AutoCollectMoney then
-            CollectMoney()
-        end
-        wait(5)
-    end
-end)
-
--- Улучшение персонажа
-if Character and Character:FindFirstChild("Humanoid") then
-    Character.Humanoid.WalkSpeed = Config.WalkSpeed
-    Character.Humanoid.JumpPower = Config.JumpPower
-end
-
--- Обновление при респавне
-LocalPlayer.CharacterAdded:Connect(function(newCharacter)
-    Character = newCharacter
-    Humanoid = Character:WaitForChild("Humanoid")
-    RootPart = Character:WaitForChild("HumanoidRootPart")
-    
-    Humanoid.WalkSpeed = Config.WalkSpeed
-    Humanoid.JumpPower = Config.JumpPower
-end)
-
--- Клавиши быстрого доступа
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.F1 then
-        Config.AutoFeed = not Config.AutoFeed
-        AutoFeedButton:Fire() -- Имитируем клик
-    elseif input.KeyCode == Enum.KeyCode.F2 then
-        Config.AutoPlay = not Config.AutoPlay
-        AutoPlayButton:Fire()
-    elseif input.KeyCode == Enum.KeyCode.H then
-        TeleportTo(TeleportLocations["Дом"])
-    end
-end)
-
--- Приветственное сообщение
-SendNotification("🎮 ADOPT ME SCRIPT", "Скрипт успешно загружен! F1/F2 - быстрые клавиши", 5)
-
-print("🚀 Adopt Me Script загружен успешно!")
-print("📋 Горячие клавиши:")
-print("   F1 - Переключить авто-кормление")
-print("   F2 - Переключить авто-игру")
-print("   H  - Телепорт домой")
+-- Запуск инициализации
+Init()
