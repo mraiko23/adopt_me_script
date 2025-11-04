@@ -1,366 +1,196 @@
---[[
-    🎨 GUI MANAGER MODULE
-    Продвинутый интерфейс для Adopt Me Script
---]]
+-- Combined executor script
+-- Run this in a Roblox executor (synapse/other) on the client to monitor PlayerGui Seeds/Gears
+-- and POST changes directly to an external API URL.
 
-local GUIManager = {}
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+local HttpService = game:GetService('HttpService')
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
 
-local LocalPlayer = Players.LocalPlayer
+-- CONFIG
+local API_URL = 'http://localhost:3000/api/stock' -- change to your site URL
+local API_KEY = nil -- optional: set API key if your server requires it
+local TARGET_PLAYER_NAME = nil -- nil = use LocalPlayer (executor attached player). Or set exact player name
+local POLL_INTERVAL = 5 -- seconds, periodic scan fallback
 
--- Темы оформления
-local Themes = {
-    Dark = {
-        Primary = Color3.fromRGB(35, 35, 50),
-        Secondary = Color3.fromRGB(45, 45, 65),
-        Accent = Color3.fromRGB(85, 170, 85),
-        AccentHover = Color3.fromRGB(170, 85, 85),
-        Text = Color3.fromRGB(255, 255, 255),
-        TextSecondary = Color3.fromRGB(200, 200, 200)
-    },
-    Light = {
-        Primary = Color3.fromRGB(240, 240, 245),
-        Secondary = Color3.fromRGB(220, 220, 230),
-        Accent = Color3.fromRGB(70, 130, 180),
-        AccentHover = Color3.fromRGB(180, 70, 70),
-        Text = Color3.fromRGB(30, 30, 30),
-        TextSecondary = Color3.fromRGB(80, 80, 80)
-    },
-    Blue = {
-        Primary = Color3.fromRGB(25, 35, 55),
-        Secondary = Color3.fromRGB(35, 45, 65),
-        Accent = Color3.fromRGB(70, 130, 180),
-        AccentHover = Color3.fromRGB(180, 130, 70),
-        Text = Color3.fromRGB(255, 255, 255),
-        TextSecondary = Color3.fromRGB(200, 220, 255)
-    }
-}
-
-function GUIManager:CreateMainGUI(config)
-    local theme = Themes[config.GUITheme] or Themes.Dark
-    
-    -- Основной ScreenGui
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "AdoptMeAdvancedGUI"
-    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    -- Главное окно
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Parent = ScreenGui
-    MainFrame.BackgroundColor3 = theme.Primary
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Position = UDim2.new(0.1, 0, 0.1, 0)
-    MainFrame.Size = UDim2.new(0, 500, 0, 600)
-    MainFrame.Active = true
-    MainFrame.Draggable = true
-    MainFrame.BackgroundTransparency = config.GUITransparency or 0.1
-    
-    -- Скругленные углы
-    local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = UDim.new(0, 15)
-    MainCorner.Parent = MainFrame
-    
-    -- Тень
-    local Shadow = Instance.new("ImageLabel")
-    Shadow.Name = "Shadow"
-    Shadow.Parent = ScreenGui
-    Shadow.BackgroundTransparency = 1
-    Shadow.Image = "rbxasset://textures/ui/Controls/DropShadow.png"
-    Shadow.Position = UDim2.new(0, MainFrame.Position.X.Offset - 10, 0, MainFrame.Position.Y.Offset - 10)
-    Shadow.Size = UDim2.new(0, MainFrame.Size.X.Offset + 20, 0, MainFrame.Size.Y.Offset + 20)
-    Shadow.ZIndex = MainFrame.ZIndex - 1
-    
-    -- Заголовок
-    local TitleBar = Instance.new("Frame")
-    TitleBar.Name = "TitleBar"
-    TitleBar.Parent = MainFrame
-    TitleBar.BackgroundColor3 = theme.Secondary
-    TitleBar.BorderSizePixel = 0
-    TitleBar.Size = UDim2.new(1, 0, 0, 50)
-    
-    local TitleCorner = Instance.new("UICorner")
-    TitleCorner.CornerRadius = UDim.new(0, 15)
-    TitleCorner.Parent = TitleBar
-    
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Name = "TitleLabel"
-    TitleLabel.Parent = TitleBar
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Position = UDim2.new(0, 15, 0, 0)
-    TitleLabel.Size = UDim2.new(0.7, 0, 1, 0)
-    TitleLabel.Font = Enum.Font.GothamBold
-    TitleLabel.Text = "🎮 ADOPT ME SCRIPT v3.0 PREMIUM"
-    TitleLabel.TextColor3 = theme.Text
-    TitleLabel.TextSize = 16
-    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    
-    -- Кнопки управления окном
-    local MinimizeButton = GUIManager:CreateButton(TitleBar, "−", UDim2.new(1, -80, 0.2, 0), UDim2.new(0, 25, 0, 25))
-    local CloseButton = GUIManager:CreateButton(TitleBar, "×", UDim2.new(1, -45, 0.2, 0), UDim2.new(0, 25, 0, 25))
-    
-    CloseButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-    MinimizeButton.BackgroundColor3 = Color3.fromRGB(255, 180, 50)
-    
-    -- Контейнер для контента
-    local ContentFrame = Instance.new("ScrollingFrame")
-    ContentFrame.Name = "ContentFrame"
-    ContentFrame.Parent = MainFrame
-    ContentFrame.BackgroundTransparency = 1
-    ContentFrame.BorderSizePixel = 0
-    ContentFrame.Position = UDim2.new(0, 0, 0, 60)
-    ContentFrame.Size = UDim2.new(1, 0, 1, -60)
-    ContentFrame.ScrollBarThickness = 5
-    ContentFrame.ScrollBarImageColor3 = theme.Accent
-    
-    -- Создание вкладок
-    local TabContainer = Instance.new("Frame")
-    TabContainer.Name = "TabContainer"
-    TabContainer.Parent = MainFrame
-    TabContainer.BackgroundTransparency = 1
-    TabContainer.Position = UDim2.new(0, 10, 0, 55)
-    TabContainer.Size = UDim2.new(1, -20, 0, 30)
-    
-    local tabs = {"Основное", "Питомцы", "Деньги", "Телепорт", "Настройки"}
-    local tabButtons = {}
-    local tabFrames = {}
-    
-    -- Создание кнопок вкладок
-    for i, tabName in ipairs(tabs) do
-        local tabButton = GUIManager:CreateTab(TabContainer, tabName, i, #tabs, theme)
-        tabButtons[i] = tabButton
-        
-        -- Создание фрейма вкладки
-        local tabFrame = Instance.new("Frame")
-        tabFrame.Name = tabName .. "Frame"
-        tabFrame.Parent = ContentFrame
-        tabFrame.BackgroundTransparency = 1
-        tabFrame.Position = UDim2.new(0, 10, 0, 40)
-        tabFrame.Size = UDim2.new(1, -20, 1, -50)
-        tabFrame.Visible = (i == 1)
-        tabFrames[i] = tabFrame
-        
-        -- Обработчик клика по вкладке
-        tabButton.MouseButton1Click:Connect(function()
-            GUIManager:SwitchTab(i, tabButtons, tabFrames, theme)
-        end)
-    end
-    
-    -- Заполнение вкладок контентом
-    GUIManager:CreateMainTab(tabFrames[1], theme, config)
-    GUIManager:CreatePetTab(tabFrames[2], theme, config)
-    GUIManager:CreateMoneyTab(tabFrames[3], theme, config)
-    GUIManager:CreateTeleportTab(tabFrames[4], theme, config)
-    GUIManager:CreateSettingsTab(tabFrames[5], theme, config)
-    
-    -- Обработчики кнопок управления
-    CloseButton.MouseButton1Click:Connect(function()
-        GUIManager:AnimateClose(ScreenGui)
-    end)
-    
-    MinimizeButton.MouseButton1Click:Connect(function()
-        GUIManager:AnimateMinimize(MainFrame)
-    end)
-    
-    -- Анимация появления
-    MainFrame.Size = UDim2.new(0, 0, 0, 0)
-    local openTween = TweenService:Create(
-        MainFrame,
-        TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-        {Size = UDim2.new(0, 500, 0, 600)}
-    )
-    openTween:Play()
-    
-    return ScreenGui, MainFrame
+-- Helpers
+local function parseStockText(txt)
+  if not txt then return 0 end
+  local num = string.match(txt, 'x(%d+)') or string.match(txt, '(%d+)')
+  return tonumber(num) or 0
 end
 
-function GUIManager:CreateButton(parent, text, position, size, theme)
-    local button = Instance.new("TextButton")
-    button.Parent = parent
-    button.BackgroundColor3 = (theme and theme.Accent) or Color3.fromRGB(70, 130, 180)
-    button.BorderSizePixel = 0
-    button.Position = position
-    button.Size = size
-    button.Font = Enum.Font.Gotham
-    button.Text = text
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.TextSize = 14
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = button
-    
-    -- Эффект наведения
-    button.MouseEnter:Connect(function()
-        local hoverTween = TweenService:Create(
-            button,
-            TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-            {BackgroundColor3 = (theme and theme.AccentHover) or Color3.fromRGB(180, 70, 70)}
-        )
-        hoverTween:Play()
-    end)
-    
-    button.MouseLeave:Connect(function()
-        local leaveTween = TweenService:Create(
-            button,
-            TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-            {BackgroundColor3 = (theme and theme.Accent) or Color3.fromRGB(70, 130, 180)}
-        )
-        leaveTween:Play()
-    end)
-    
-    return button
-end
-
-function GUIManager:CreateTab(parent, text, index, total, theme)
-    local tabWidth = 1 / total
-    local tabButton = Instance.new("TextButton")
-    tabButton.Name = text .. "Tab"
-    tabButton.Parent = parent
-    tabButton.BackgroundColor3 = theme.Secondary
-    tabButton.BorderSizePixel = 0
-    tabButton.Position = UDim2.new(tabWidth * (index - 1), 2, 0, 0)
-    tabButton.Size = UDim2.new(tabWidth, -4, 1, 0)
-    tabButton.Font = Enum.Font.Gotham
-    tabButton.Text = text
-    tabButton.TextColor3 = theme.Text
-    tabButton.TextSize = 12
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
-    corner.Parent = tabButton
-    
-    return tabButton
-end
-
-function GUIManager:SwitchTab(activeIndex, tabButtons, tabFrames, theme)
-    for i, button in ipairs(tabButtons) do
-        local frame = tabFrames[i]
-        if i == activeIndex then
-            button.BackgroundColor3 = theme.Accent
-            frame.Visible = true
-        else
-            button.BackgroundColor3 = theme.Secondary
-            frame.Visible = false
+local function scanItemsInScrolling(scrollingFrame)
+  local result = {}
+  for _, child in ipairs(scrollingFrame:GetChildren()) do
+    if child:IsA('Frame') or child:IsA('TextButton') or child:IsA('ImageButton') then
+      -- robust descendant search for Title/Stock/Rarity labels
+      local function findLabel(root, name)
+        for _, d in ipairs(root:GetDescendants()) do
+          if d.Name == name and (d:IsA('TextLabel') or d:IsA('TextButton')) then return d end
         end
+        return nil
+      end
+
+      local nameLabel = findLabel(child, 'Title') or findLabel(child, 'Name')
+      -- fallback: first TextLabel/TextButton descendant
+      if not nameLabel then
+        for _, d in ipairs(child:GetDescendants()) do
+          if d:IsA('TextLabel') or d:IsA('TextButton') then
+            nameLabel = d
+            break
+          end
+        end
+      end
+      local stockLabel = findLabel(child, 'Stock') or findLabel(child, 'stock')
+      local rarityLabel = findLabel(child, 'Rarity') or findLabel(child, 'rarity')
+      local itemName = nil
+      if nameLabel and nameLabel.Text then itemName = nameLabel.Text end
+      if not itemName then itemName = child.Name end
+      local stockText = (stockLabel and stockLabel.Text) or ''
+      local stock = parseStockText(stockText)
+      local rarity = (rarityLabel and rarityLabel.Text) or nil
+      result[string.lower(itemName)] = { displayName = itemName, stock = stock, rarity = rarity }
     end
+  end
+  return result
 end
 
-function GUIManager:CreateMainTab(parent, theme, config)
-    local yPos = 0
-    
-    -- Статистика
-    local statsFrame = Instance.new("Frame")
-    statsFrame.Name = "StatsFrame"
-    statsFrame.Parent = parent
-    statsFrame.BackgroundColor3 = theme.Secondary
-    statsFrame.BorderSizePixel = 0
-    statsFrame.Position = UDim2.new(0, 0, 0, yPos)
-    statsFrame.Size = UDim2.new(1, 0, 0, 100)
-    
-    local statsCorner = Instance.new("UICorner")
-    statsCorner.CornerRadius = UDim.new(0, 10)
-    statsCorner.Parent = statsFrame
-    
-    local statsTitle = Instance.new("TextLabel")
-    statsTitle.Name = "StatsTitle"
-    statsTitle.Parent = statsFrame
-    statsTitle.BackgroundTransparency = 1
-    statsTitle.Size = UDim2.new(1, 0, 0, 30)
-    statsTitle.Font = Enum.Font.GothamBold
-    statsTitle.Text = "📊 СТАТИСТИКА"
-    statsTitle.TextColor3 = theme.Text
-    statsTitle.TextSize = 14
-    
-    yPos = yPos + 120
-    
-    -- Основные кнопки
-    local buttons = {
-        {"🍎 Авто-кормление", "AutoFeed"},
-        {"🎮 Авто-игра", "AutoPlay"},
-        {"💰 Авто-сбор денег", "AutoMoney"},
-        {"🎁 Авто-сбор подарков", "AutoGifts"}
-    }
-    
-    for i, buttonData in ipairs(buttons) do
-        local button = GUIManager:CreateButton(
-            parent,
-            buttonData[1] .. ": ВЫКЛ",
-            UDim2.new(0, 0, 0, yPos),
-            UDim2.new(1, 0, 0, 40),
-            theme
-        )
-        
-        yPos = yPos + 50
+local function findScrolling(playerGui, containerName)
+  if not playerGui then return nil end
+  local main = playerGui:FindFirstChild('Main') or playerGui:FindFirstChildWhichIsA('ScreenGui')
+  if not main then return nil end
+  local container = main:FindFirstChild(containerName)
+  if not container then return nil end
+  local frame = container:FindFirstChild('Frame') or container
+  local scrolling = frame:FindFirstChild('ScrollingFrame')
+  return scrolling
+end
+
+local function getTargetPlayer()
+  if TARGET_PLAYER_NAME and TARGET_PLAYER_NAME ~= '' then
+    return Players:FindFirstChild(TARGET_PLAYER_NAME)
+  end
+  return Players.LocalPlayer or Players:GetPlayers()[1]
+end
+
+-- HTTP POST using executor-provided functions
+local function httpPost(url, body, headers)
+  local bodyStr = HttpService:JSONEncode(body)
+  headers = headers or {}
+  headers['Content-Type'] = 'application/json'
+  if API_KEY then headers['x-api-key'] = API_KEY end
+
+  local ok, res
+  -- Detect available request function and use it. Log method used for debugging.
+  if syn and syn.request then
+    print('[debug] using syn.request for HTTP POST')
+    ok, res = pcall(function() return syn.request({ Url = url, Method = 'POST', Headers = headers, Body = bodyStr }) end)
+    if not ok then warn('[debug] syn.request pcall failed', res) end
+    if ok and res and (res.StatusCode == 200 or res.StatusCode == 201) then return true, res end
+    return false, res
+  end
+
+  if http_request then
+    print('[debug] using http_request for HTTP POST')
+    ok, res = pcall(function() return http_request({ Url = url, Method = 'POST', Headers = headers, Body = bodyStr }) end)
+    if not ok then warn('[debug] http_request pcall failed', res) end
+    return ok, res
+  end
+
+  if request then
+    print('[debug] using request for HTTP POST')
+    ok, res = pcall(function() return request({ Url = url, Method = 'POST', Headers = headers, Body = bodyStr }) end)
+    if not ok then warn('[debug] request pcall failed', res) end
+    return ok, res
+  end
+
+  -- As last resort, try to use HttpService.PostAsync (may fail on client)
+  print('[debug] using HttpService:PostAsync for HTTP POST (fallback)')
+  ok, res = pcall(function() return HttpService:PostAsync(url, bodyStr, Enum.HttpContentType.ApplicationJson, false, headers) end)
+  if not ok then warn('[debug] HttpService:PostAsync pcall failed', res) end
+  return ok, res
+end
+
+-- Snapshot and change detection
+local lastSnapshot = { seeds = {}, gears = {} }
+local debounce = 0
+
+local function detectChangesAndSend(seedsScroll, gearsScroll)
+  if tick() < debounce then return end
+  debounce = tick() + 0.5
+
+  local seeds = seedsScroll and scanItemsInScrolling(seedsScroll) or {}
+  local gears = gearsScroll and scanItemsInScrolling(gearsScroll) or {}
+
+  local changed = false
+  for k,v in pairs(seeds) do
+    local prev = lastSnapshot.seeds[k]
+    if not prev or prev.stock ~= v.stock then changed = true; break end
+  end
+  if not changed then
+    for k,v in pairs(gears) do
+      local prev = lastSnapshot.gears[k]
+      if not prev or prev.stock ~= v.stock then changed = true; break end
     end
-end
+  end
 
-function GUIManager:CreatePetTab(parent, theme, config)
-    -- Контент для вкладки питомцев
-    local petList = Instance.new("ScrollingFrame")
-    petList.Name = "PetList"
-    petList.Parent = parent
-    petList.BackgroundColor3 = theme.Secondary
-    petList.BorderSizePixel = 0
-    petList.Size = UDim2.new(1, 0, 0.7, 0)
-    petList.ScrollBarThickness = 5
-    
-    local petCorner = Instance.new("UICorner")
-    petCorner.CornerRadius = UDim.new(0, 10)
-    petCorner.Parent = petList
-end
-
-function GUIManager:CreateMoneyTab(parent, theme, config)
-    -- Контент для вкладки денег
-end
-
-function GUIManager:CreateTeleportTab(parent, theme, config)
-    -- Контент для вкладки телепортации
-end
-
-function GUIManager:CreateSettingsTab(parent, theme, config)
-    -- Контент для настроек
-end
-
-function GUIManager:AnimateClose(gui)
-    local closeTween = TweenService:Create(
-        gui,
-        TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-        {Size = UDim2.new(0, 0, 0, 0)}
-    )
-    closeTween:Play()
-    closeTween.Completed:Connect(function()
-        gui:Destroy()
-    end)
-end
-
-function GUIManager:AnimateMinimize(frame)
-    local isMinimized = frame:GetAttribute("Minimized") or false
-    
-    if isMinimized then
-        -- Развернуть
-        local expandTween = TweenService:Create(
-            frame,
-            TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-            {Size = UDim2.new(0, 500, 0, 600)}
-        )
-        expandTween:Play()
-        frame:SetAttribute("Minimized", false)
+  if changed then
+    lastSnapshot.seeds = seeds
+    lastSnapshot.gears = gears
+    local payload = { seeds = seeds, gears = gears, ts = os.time() }
+    local ok, res = httpPost(API_URL, payload)
+    if ok then
+      print('[stock] Posted update to', API_URL)
     else
-        -- Свернуть
-        local minimizeTween = TweenService:Create(
-            frame,
-            TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-            {Size = UDim2.new(0, 500, 0, 50)}
-        )
-        minimizeTween:Play()
-        frame:SetAttribute("Minimized", true)
+      warn('[stock] Failed to post update', res)
     end
+  end
 end
 
-return GUIManager
+-- Main setup
+local function start()
+  local player = getTargetPlayer()
+  if not player then warn('Target player not found') return end
+  local playerGui = player:FindFirstChild('PlayerGui') or player:WaitForChild('PlayerGui')
+  local seedsScroll = findScrolling(playerGui, 'Seeds')
+  local gearsScroll = findScrolling(playerGui, 'Gears')
+
+  if not seedsScroll and not gearsScroll then
+    warn('No Seeds or Gears scrolling frames found for player', player.Name)
+  end
+
+  if seedsScroll then
+    seedsScroll.ChildAdded:Connect(function() detectChangesAndSend(seedsScroll, gearsScroll) end)
+    seedsScroll.ChildRemoved:Connect(function() detectChangesAndSend(seedsScroll, gearsScroll) end)
+    seedsScroll.DescendantAdded:Connect(function() detectChangesAndSend(seedsScroll, gearsScroll) end)
+  end
+  if gearsScroll then
+    gearsScroll.ChildAdded:Connect(function() detectChangesAndSend(seedsScroll, gearsScroll) end)
+    gearsScroll.ChildRemoved:Connect(function() detectChangesAndSend(seedsScroll, gearsScroll) end)
+    gearsScroll.DescendantAdded:Connect(function() detectChangesAndSend(seedsScroll, gearsScroll) end)
+  end
+
+  -- debug info
+  pcall(function()
+    print('[stock] Executor monitor starting for player', player.Name)
+    print('[stock] CONFIG:', 'API_URL=' .. tostring(API_URL), 'API_KEY=' .. tostring(API_KEY), 'TARGET_PLAYER_NAME=' .. tostring(TARGET_PLAYER_NAME), 'POLL_INTERVAL=' .. tostring(POLL_INTERVAL))
+    print('[stock] http functions availability:', 'syn=' .. tostring(type(syn) ~= 'nil'), 'http_request=' .. tostring(type(http_request) ~= 'nil'), 'request=' .. tostring(type(request) ~= 'nil'))
+    if seedsScroll then print('[stock] seeds scrolling found with child count', #seedsScroll:GetChildren()) end
+    if gearsScroll then print('[stock] gears scrolling found with child count', #gearsScroll:GetChildren()) end
+  end)
+
+  -- periodic scan
+  spawn(function()
+    while true do
+      local ok, err = pcall(function() detectChangesAndSend(seedsScroll, gearsScroll) end)
+      if not ok then warn('[stock] detectChangesAndSend error', err) end
+      wait(POLL_INTERVAL)
+    end
+  end)
+
+  print('[stock] Executor monitor started for player', player.Name)
+end
+
+start()
+
+
